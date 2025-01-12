@@ -1,0 +1,95 @@
+#define BLYNK_TEMPLATE_ID "TMPL6akHXER1A"
+#define BLYNK_TEMPLATE_NAME "ESP32 Plant watering"
+#define BLYNK_AUTH_TOKEN "e8vjl1vJzTYAkmA1b3oISjrk06vxtlae"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <DHT.h>
+#include <ESP32Servo.h>
+
+// Pin Definitions
+#define DHTPIN 15           // GPIO pin for DHT sensor
+#define DHTTYPE DHT11       // DHT11 or DHT22 sensor
+#define SOIL_SENSOR_PIN 34  // GPIO pin for soil moisture sensor
+#define RELAY_PIN 12        // GPIO pin for relay module
+#define SERVO_PIN 14        // GPIO pin for servo motor
+
+// Create objects
+DHT dht(DHTPIN, DHTTYPE);
+Servo myservo;
+
+// Blynk credentials
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "YourWiFiSSID";     // Enter your Wi-Fi SSID
+char pass[] = "YourWiFiPassword"; // Enter your Wi-Fi password
+
+// Variables to store manual control states
+bool manualPumpControl = false;
+int manualValvePosition = 0;
+
+void setup() {
+  // Serial Monitor
+  Serial.begin(115200);
+
+  // Initialize Blynk
+  Blynk.begin(auth, ssid, pass);
+
+  // Initialize DHT Sensor
+  dht.begin();
+
+  // Set Pin Modes
+  pinMode(SOIL_SENSOR_PIN, INPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+
+  // Attach Servo
+  myservo.attach(SERVO_PIN);
+
+  // Initial States
+  digitalWrite(RELAY_PIN, LOW); // Water pump OFF
+  myservo.write(0);             // Valve closed
+}
+
+void loop() {
+  // Run Blynk
+  Blynk.run();
+
+  // Read Sensors
+  int soilMoisture = analogRead(SOIL_SENSOR_PIN); // Soil moisture value
+  float temperature = dht.readTemperature();     // Temperature value
+  
+  // Send data to Blynk
+  Blynk.virtualWrite(V1, soilMoisture);  // Soil moisture on Virtual Pin V1
+  Blynk.virtualWrite(V2, temperature);   // Temperature on Virtual Pin V2
+
+  // Automatic Control Logic
+  if (!manualPumpControl) {
+    if (soilMoisture < 3000) {  // Soil is dry
+      digitalWrite(RELAY_PIN, HIGH); // Turn ON water pump
+    } else {
+      digitalWrite(RELAY_PIN, LOW); // Turn OFF water pump
+    }
+  }
+
+  if (temperature > 30) {  // If temperature is too high
+    digitalWrite(RELAY_PIN, HIGH); // Ensure pump is ON
+  }
+
+  if (!manualValvePosition) {
+    myservo.write(manualValvePosition); // Adjust valve based on manual input
+  }
+
+  // Delay for stability
+  delay(1000);
+}
+
+// Blynk callback for manual pump control
+BLYNK_WRITE(V3) {
+  manualPumpControl = param.asInt();  // Read button state
+  digitalWrite(RELAY_PIN, manualPumpControl ? HIGH : LOW); // Control pump
+}
+
+// Blynk callback for manual valve control
+BLYNK_WRITE(V4) {
+  manualValvePosition = param.asInt(); // Read slider value
+  myservo.write(manualValvePosition);  // Adjust valve position
+}

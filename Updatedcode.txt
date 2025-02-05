@@ -1,0 +1,92 @@
+#define BLYNK_TEMPLATE_ID "TMPL6VWD3paeI" 
+#define BLYNK_TEMPLATE_NAME "Smart irrigation system" 
+#define BLYNK_AUTH_TOKEN "G7kd1px3AkIlRZ2BuodsWzvXf5uffgvR" 
+ 
+#include <WiFi.h> 
+#include <BlynkSimpleEsp32.h> 
+#include <ESP32Servo.h> 
+#include "DHT.h" 
+ 
+// WiFi credentials 
+char ssid[] = "One Plus 8 Pro";      
+
+char pass[] = "1111222233";  
+ 
+// Pin assignments 
+Servo servo; 
+int servoPin = 18;         // Pin connected to the servo motor 
+int relayPin = 27;         // Pin connected to the relay module 
+int soilMoisturePin = 34;  // Analog pin for the soil moisture sensor 
+int dhtPin = 12;           // Pin connected to the DHT11 sensor 
+ 
+// DHT sensor setup 
+#define DHTTYPE DHT11 
+DHT dht(dhtPin, DHTTYPE); 
+ 
+BlynkTimer timer; 
+ 
+// Function to read sensors and control the irrigation system 
+void controlIrrigation() { 
+  int soilMoistureValue = analogRead(soilMoisturePin); // Read soil moisture 
+  float temperature = dht.readTemperature();          // Read temperature 
+  float humidity = dht.readHumidity();                // Read humidity 
+ 
+  // Convert soil moisture sensor reading to percentage 
+  int soilMoisturePercent = map(soilMoistureValue, 0, 4095, 0, 100); 
+ 
+  // Send sensor data to Blynk app 
+  Blynk.virtualWrite(V1, soilMoisturePercent); // Soil Moisture 
+  Blynk.virtualWrite(V2, temperature);         // Temperature 
+  Blynk.virtualWrite(V3, humidity);            // Humidity 
+ 
+  // Control logic based on soil moisture 
+  if (soilMoisturePercent < 30) { // If soil is dry (below 30%) 
+    digitalWrite(relayPin, HIGH); // Turn on water pump 
+    servo.write(90);              // Open valve (90 degrees) 
+  } else { 
+    digitalWrite(relayPin, LOW);  // Turn off water pump 
+    servo.write(0);               // Close valve (0 degrees) 
+  } 
+} 
+ 
+// Blynk function to control the servo via slider 
+BLYNK_WRITE(V4) { 
+  int sliderValue = param.asInt(); // Get the slider value 
+  servo.write(sliderValue);        // Move servo to the slider value 
+} 
+ 
+void setup() { 
+  // Setup the relay pin 
+  Serial.begin(115200); 
+  pinMode(relayPin, OUTPUT); 
+  digitalWrite(relayPin, LOW); // Ensure the relay is off at start 
+ 
+  // Attach servo to pin 
+  servo.attach(servoPin); 
+ 
+  // Initialize DHT sensor 
+  dht.begin(); 
+ 
+  // Begin serial for debugging 
+  Serial.begin(115200); 
+ 
+  // Begin Blynk connection 
+  Serial.print("Connecting to Wi-Fi: "); 
+  Serial.println(ssid); 
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass); 
+ 
+  // Check connection status 
+  if (WiFi.status() != WL_CONNECTED) { 
+    Serial.println("Failed to connect to Wi-Fi"); 
+  } else { 
+    Serial.println("Connected to Wi-Fi"); 
+  } 
+ 
+  // Setup a timer to check the sensors every second 
+  timer.setInterval(1000L, controlIrrigation); 
+} 
+ 
+void loop() { 
+  Blynk.run(); 
+  timer.run(); 
+} 
